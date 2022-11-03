@@ -1,21 +1,18 @@
 // Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 // SPDX-License-Identifier: MIT-0
 // blob/main/src/api/get-products.ts
-import { APIGatewayProxyEvent, APIGatewayProxyResult} from "aws-lambda";
-import { DynamoDbStore } from "../store/dynamodb/dynamodb-store";
-import { ProductStore } from "../store/product-store";
-import { logger, tracer, metrics } from "../powertools/utilities"
-import middy from "@middy/core";
-import { captureLambdaHandler } from '@aws-lambda-powertools/tracer';
-import { injectLambdaContext } from '@aws-lambda-powertools/logger';
-import { logMetrics, MetricUnits } from '@aws-lambda-powertools/metrics';
+import { MetricUnits } from '@aws-lambda-powertools/metrics';
+import { APIGatewayProxyEvent, APIGatewayProxyResult } from "aws-lambda";
+import { logger, metrics } from "../powertools/utilities";
+import { ReadOnlyProducts, getProductStore } from "../store/product-store";
+import { makeHandler } from "../utils";
 
-const store: ProductStore = new DynamoDbStore();
-const lambdaHandler = async (event: APIGatewayProxyEvent): Promise<APIGatewayProxyResult> => {
-
+async function lambdaHandler(event: APIGatewayProxyEvent, policies: ReadOnlyProducts): Promise<APIGatewayProxyResult> {
   logger.appendKeys({
     resource_path: event.requestContext.resourcePath
   });
+
+  const store = getProductStore(policies);
 
   try {
     const result = await store.getProducts();
@@ -39,11 +36,10 @@ const lambdaHandler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPro
   }
 };
 
-const handler = middy(lambdaHandler)
-    .use(captureLambdaHandler(tracer))
-    .use(logMetrics(metrics, { captureColdStartMetric: true }))
-    .use(injectLambdaContext(logger, { clearState: true }));
-
-export {
-  handler
-};
+export const handler = makeHandler(lambdaHandler, {
+  policies: ReadOnlyProducts,
+  httpMethod: 'GET',
+  logicalName: 'GetProductsFunction',
+  resourcePath: 'products',
+  entry: __filename,
+});

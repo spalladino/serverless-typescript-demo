@@ -1,12 +1,13 @@
 #!/usr/bin/env node
 // Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 // SPDX-License-Identifier: MIT-0
-import "source-map-support/register";
 import * as cdk from "aws-cdk-lib";
+import "source-map-support/register";
 import { ServerlessTypescriptDemoStack } from '../lib/serverless-typescript-demo-stack';
+import * as handlers from '../src/api';
 
 const app = new cdk.App();
-new ServerlessTypescriptDemoStack(app, 'ServerlessTypescriptDemoStack', {
+const stack = new ServerlessTypescriptDemoStack(app, 'ServerlessTypescriptDemoStack', {
   /* If you don't specify 'env', this stack will be environment-agnostic.
    * Account/Region-dependent features and context lookups will not work,
    * but a single synthesized template can be deployed anywhere. */
@@ -21,3 +22,7 @@ new ServerlessTypescriptDemoStack(app, 'ServerlessTypescriptDemoStack', {
 
   /* For more information, see https://docs.aws.amazon.com/cdk/latest/guide/environments.html */
 });
+
+for (const handler of Object.values(handlers)) {
+  stack.makeFunction(handler.params);  
+}

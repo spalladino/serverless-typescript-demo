@@ -1,18 +1,13 @@
 // Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 // SPDX-License-Identifier: MIT-0
+import { MetricUnits } from '@aws-lambda-powertools/metrics';
 import { APIGatewayProxyEvent, APIGatewayProxyResult } from "aws-lambda";
-import { Product } from "../model/product";
-import { DynamoDbStore } from "../store/dynamodb/dynamodb-store";
-import { ProductStore } from "../store/product-store";
-import { captureLambdaHandler } from '@aws-lambda-powertools/tracer';
-import { injectLambdaContext } from '@aws-lambda-powertools/logger';
-import { logMetrics, MetricUnits } from '@aws-lambda-powertools/metrics';
-import middy from "@middy/core";
-import { logger, metrics, tracer } from "../powertools/utilities";
+import { Product } from "../model/Product";
+import { logger, metrics } from "../powertools/utilities";
+import { ReadWriteProducts, getProductStore } from "../store/product-store";
+import { makeHandler } from "../utils";
 
-const store: ProductStore = new DynamoDbStore();
-const lambdaHandler = async (event: APIGatewayProxyEvent): Promise<APIGatewayProxyResult> => {
-
+async function lambdaHandler(event: APIGatewayProxyEvent, policies: ReadWriteProducts): Promise<APIGatewayProxyResult> {
   logger.appendKeys({
     resource_path: event.requestContext.resourcePath
   });
@@ -47,7 +42,7 @@ const lambdaHandler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPro
     if ((typeof product) !== "object" ){
       throw Error("Parsed product is not an object")
     }
-  } catch (error) {
+  } catch (error: any) {
     logger.error('Unexpected error occurred while trying to create a product', error);
 
     return {
@@ -71,6 +66,8 @@ const lambdaHandler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPro
     };
   }
 
+  const store = getProductStore(policies);
+
   try {
     await store.putProduct(product);
 
@@ -82,7 +79,7 @@ const lambdaHandler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPro
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ message: "Product created" }),
     };
-  } catch (error) {
+  } catch (error: any) {
     logger.error('Unexpected error occurred while trying to create a product', error);
 
     return {
@@ -93,11 +90,10 @@ const lambdaHandler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPro
   }
 };
 
-const handler = middy(lambdaHandler)
-    .use(captureLambdaHandler(tracer))
-    .use(logMetrics(metrics, { captureColdStartMetric: true }))
-    .use(injectLambdaContext(logger, { clearState: true }));
-
-export {
-  handler
-};
+export const handler = makeHandler(lambdaHandler, {
+  policies: ReadWriteProducts,
+  httpMethod: 'PUT',
+  logicalName: 'PutProductFunction',
+  resourcePath: 'products/{id}',
+  entry: __filename,
+});
